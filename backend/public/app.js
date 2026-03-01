@@ -1,25 +1,15 @@
-let AUTH = { login: "", senha: "" };
 let SITUACOES = [];
 
 const el = (id) => document.getElementById(id);
 
-function setMsg(target, text, cls) {
-  const e = el(target);
+function setMsg(text, cls) {
+  const e = el("msgApp");
   e.className = cls || "";
   e.textContent = text || "";
 }
 
 async function api(path, opts = {}) {
-  const headers = Object.assign(
-    { "Content-Type": "application/json" },
-    opts.headers || {}
-  );
-
-  if (AUTH.login && AUTH.senha) {
-    headers["X-Login"] = AUTH.login;
-    headers["X-Senha"] = AUTH.senha;
-  }
-
+  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   const res = await fetch(path, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "erro");
@@ -39,6 +29,7 @@ function renderTabela(rows) {
 
     const tdSit = document.createElement("td");
     const sel = document.createElement("select");
+
     const opt0 = document.createElement("option");
     opt0.value = "";
     opt0.textContent = "";
@@ -74,9 +65,9 @@ function renderTabela(rows) {
             observacao: ta.value
           })
         });
-        setMsg("msgApp", "salvo.", "ok");
+        setMsg("salvo.", "ok");
       } catch (e) {
-        setMsg("msgApp", String(e.message || e), "err");
+        setMsg(String(e.message || e), "err");
       } finally {
         btn.disabled = false;
       }
@@ -89,63 +80,35 @@ function renderTabela(rows) {
 }
 
 async function carregar() {
-  setMsg("msgApp", "carregando...", "muted");
+  setMsg("carregando...", "muted");
   const conf = await api("/api/config");
   SITUACOES = conf.situacoes || [];
   el("listaSituacoes").textContent = SITUACOES.join(", ");
 
   const out = await api("/api/estado");
-  el("pillData").textContent = `DATA DO DIA: ${out.hoje}`;
+  el("pillData").textContent = `DATA DO DIA: ${out.hoje_br || out.hoje}`;
   renderTabela(out.data || []);
-  setMsg("msgApp", "", "");
+  setMsg("", "");
 }
 
-el("btnEntrar").onclick = async () => {
-  const login = (el("login").value || "").trim();
-  const senha = (el("senha").value || "").trim();
-
-  try {
-    const out = await api("/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ login, senha })
-    });
-
-    if (!out.ok) {
-      setMsg("msgLogin", "acesso negado.", "err");
-      return;
-    }
-
-    AUTH = { login, senha };
-    setMsg("msgLogin", "acesso liberado.", "ok");
-    el("boxLogin").style.display = "none";
-    el("boxApp").style.display = "block";
-    await carregar();
-  } catch (e) {
-    setMsg("msgLogin", String(e.message || e), "err");
-  }
-};
-
 el("btnRecarregar").onclick = () => carregar();
+
+el("btnPdf").onclick = () => window.open("/api/pdf", "_blank");
 
 el("btnSalvarTudo").onclick = async () => {
   const rows = Array.from(el("tbody").querySelectorAll("tr"));
   el("btnSalvarTudo").disabled = true;
   try {
     for (const tr of rows) {
-      const nome = tr.children[0]?.textContent || "";
-      const sel = tr.children[1]?.querySelector("select");
-      const ta = tr.children[2]?.querySelector("textarea");
       const btn = tr.children[3]?.querySelector("button");
-
-      // Descobre o oficial_id pelo índice em memória: não temos aqui.
-      // Então, fazemos o clique no botão individual para reaproveitar a lógica.
       if (btn) await btn.onclick();
     }
-    setMsg("msgApp", "salvar tudo concluído.", "ok");
+    setMsg("salvar tudo concluído.", "ok");
   } catch (e) {
-    setMsg("msgApp", String(e.message || e), "err");
+    setMsg(String(e.message || e), "err");
   } finally {
     el("btnSalvarTudo").disabled = false;
   }
 };
+
+carregar();

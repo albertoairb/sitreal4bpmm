@@ -3,15 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Situação Real – 4º BPM/M</title>
+  <title>SITUAÇÃO REAL – 4º BPM/M</title>
   <style>
     body { font-family: Arial, Helvetica, sans-serif; margin: 18px; }
     .card { max-width: 1100px; margin: 0 auto; border: 1px solid #ddd; border-radius: 10px; padding: 16px; }
     h1 { font-size: 18px; margin: 0 0 12px 0; }
-    h2 { font-size: 14px; margin: 10px 0; color: #333; }
     .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    label { font-size: 12px; color: #333; }
-    input { padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
     button { padding: 8px 12px; border: 0; border-radius: 8px; background: #111; color: #fff; cursor: pointer; }
     button:disabled { opacity: .5; cursor: not-allowed; }
     table { width: 100%; border-collapse: collapse; margin-top: 14px; }
@@ -34,50 +31,28 @@
       <div class="pill" id="pillData">CARREGANDO...</div>
     </div>
 
-    <div id="boxLogin">
-      <h2>ACESSO</h2>
-      <div class="row">
-        <div>
-          <label>LOGIN</label><br/>
-          <input id="login" value="4BPMM" autocomplete="off" />
-        </div>
-        <div>
-          <label>SENHA</label><br/>
-          <input id="senha" type="password" value="" autocomplete="off" />
-        </div>
-        <div style="align-self:flex-end;">
-          <button id="btnEntrar">ENTRAR</button>
-        </div>
-        <div class="muted" id="msgLogin"></div>
+    <div class="row" style="justify-content: space-between; margin-top: 10px;">
+      <div class="muted">situações: <span id="listaSituacoes"></span></div>
+      <div class="right">
+        <button id="btnRecarregar">RECARREGAR</button>
+        <button id="btnPdf">PDF</button>
+        <button id="btnSalvarTudo">SALVAR TUDO</button>
       </div>
-      <p class="muted">
-        regra: válido somente no dia; virou o dia, zera automaticamente (sem histórico).
-      </p>
     </div>
 
-    <div id="boxApp" style="display:none;">
-      <div class="row" style="justify-content: space-between;">
-        <div class="muted">situações: <span id="listaSituacoes"></span></div>
-        <div class="right">
-          <button id="btnRecarregar">RECARREGAR</button>
-          <button id="btnSalvarTudo">SALVAR TUDO</button>
-        </div>
-      </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 34%;">OFICIAL</th>
+          <th style="width: 16%;">SITUAÇÃO</th>
+          <th>OBSERVAÇÃO (LIVRE)</th>
+          <th style="width: 10%;">AÇÃO</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
 
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 34%;">OFICIAL</th>
-            <th style="width: 16%;">SITUAÇÃO</th>
-            <th>OBSERVAÇÃO (LIVRE)</th>
-            <th style="width: 10%;">AÇÃO</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-
-      <div class="muted" id="msgApp" style="margin-top:10px;"></div>
-    </div>
+    <div class="muted" id="msgApp" style="margin-top:10px;"></div>
   </div>
 
   <script src="app.js"></script>
