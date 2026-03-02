@@ -13,29 +13,21 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
-app.use(
-  express.static(path.join(__dirname, "public"), {
-    etag: false,
-    lastModified: false,
-    setHeaders: (res, filePath) => {
-      // Evita cache agressivo no mobile (Android/iOS) para HTML/CSS/JS
-      if (/\.(html|css|js)$/.test(filePath)) {
-        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-        res.setHeader("Pragma", "no-cache");
-        res.setHeader("Expires", "0");
-      }
-    },
-  })
-);
+app.use(express.static(path.join(__dirname, "public")));
 
-// Evita cache em respostas da API (mobile costuma reaproveitar respostas antigas)
-app.use("/api", (_req, res, next) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
+/**
+ * Anti-cache (ajuda mobile a não “congelar” respostas antigas)
+ * - Mantém o app sempre atualizado no Android/iOS
+ */
+app.use((req, res, next) => {
+  // Não aplico isso em tudo que é estático por padrão do express, mas isso ajuda bem no mobile.
+  // Para o PDF tem headers próprios mais fortes mais abaixo.
+  if (req.path.startsWith("/api/") || req.path === "/" || req.path.endsWith(".html")) {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+  }
   next();
 });
-
 
 function hojeSP() {
   const tz = process.env.TIMEZONE || "America/Sao_Paulo";
@@ -67,7 +59,7 @@ function missingDbEnv(cfg) {
 
 const pool = mysql.createPool(dbConfig());
 
-// Situações (tudo em maiúsculo)
+// Situações (tudo em maiúsculo). Mantidas + CFP_DIA / CFP_NOITE.
 const SITUACOES = [
   "VE",
   "MA",
@@ -108,6 +100,7 @@ async function ensureSchema() {
 
 async function resetSeNovoDia() {
   const hoje = hojeSP();
+
   const [rows] = await pool.query(`SELECT COUNT(*) AS c FROM estado_do_dia WHERE data_ref = ?`, [hoje]);
   if ((rows?.[0]?.c ?? 0) > 0) return;
 
@@ -182,6 +175,7 @@ app.get("/api/estado", async (_req, res) => {
   }
 });
 
+// salvar individual (mantido)
 app.post("/api/estado", async (req, res) => {
   try {
     const { oficial_id, situacao, observacao } = req.body || {};
@@ -207,12 +201,74 @@ app.post("/api/estado", async (req, res) => {
   }
 });
 
+/**
+ * ✅ CORREÇÃO DEFINITIVA MOBILE:
+ * SALVAR TUDO em UMA ÚNICA REQUISIÇÃO (evita o Android “perder” parte das atualizações).
+ */
+app.post("/api/estado/bulk", async (req, res) => {
+  try {
+    const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+    if (itens.length === 0) return res.status(400).json({ ok: false, error: "itens vazio" });
+
+    for (const it of itens) {
+      const id = Number(it?.oficial_id);
+      if (!id) return res.status(400).json({ ok: false, error: "oficial_id inválido" });
+
+      const situacao = it?.situacao ?? "";
+      if (situacao !== "" && situacao != null && !SITUACOES.includes(String(situacao))) {
+        return res.status(400).json({ ok: false, error: `situação inválida: ${situacao}` });
+      }
+
+      const obs = (it?.observacao ?? "").toString();
+      if (obs.length > 255) return res.status(400).json({ ok: false, error: "observacao > 255" });
+    }
+
+    const out = await getEstadoDoDia();
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      for (const it of itens) {
+        const id = Number(it.oficial_id);
+        const sit = (it.situacao ?? "").toString().trim().slice(0, 50) || null;
+        const obs = (it.observacao ?? "").toString().trim().slice(0, 255) || null;
+
+        await conn.query(
+          `UPDATE estado_do_dia
+           SET situacao = ?, observacao = ?, atualizado_em = NOW()
+           WHERE data_ref = ? AND oficial_id = ?`,
+          [sit, obs, out.hoje, id]
+        );
+      }
+
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
+
+    res.json({ ok: true, qtd: itens.length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 app.get("/api/pdf", async (_req, res) => {
   try {
     const { hoje, data } = await getEstadoDoDia();
     const hojeBr = formatarBR(hoje);
 
     res.setHeader("Content-Type", "application/pdf");
+
+    // ✅ PDF sem cache (Android/iOS)
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+
     res.setHeader("Content-Disposition", `inline; filename="SITUACAO_REAL_4BPMM_${hojeBr.replaceAll("/", "-")}.pdf"`);
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -273,9 +329,7 @@ app.get("/api/pdf", async (_req, res) => {
 });
 
 app.get("*", (_req, res) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
+  // mantém SPA simples (index.html)
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
