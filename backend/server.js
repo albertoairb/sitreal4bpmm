@@ -13,7 +13,29 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    etag: false,
+    lastModified: false,
+    setHeaders: (res, filePath) => {
+      // Evita cache agressivo no mobile (Android/iOS) para HTML/CSS/JS
+      if (/\.(html|css|js)$/.test(filePath)) {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+      }
+    },
+  })
+);
+
+// Evita cache em respostas da API (mobile costuma reaproveitar respostas antigas)
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 
 function hojeSP() {
   const tz = process.env.TIMEZONE || "America/Sao_Paulo";
@@ -191,13 +213,6 @@ app.get("/api/pdf", async (_req, res) => {
     const hojeBr = formatarBR(hoje);
 
     res.setHeader("Content-Type", "application/pdf");
-
-    // ✅ FIX MOBILE: impedir cache do PDF (Android/iOS)
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-    res.setHeader("Surrogate-Control", "no-store");
-
     res.setHeader("Content-Disposition", `inline; filename="SITUACAO_REAL_4BPMM_${hojeBr.replaceAll("/", "-")}.pdf"`);
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -258,6 +273,9 @@ app.get("/api/pdf", async (_req, res) => {
 });
 
 app.get("*", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
