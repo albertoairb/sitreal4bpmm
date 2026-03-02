@@ -191,6 +191,13 @@ app.get("/api/pdf", async (_req, res) => {
     const hojeBr = formatarBR(hoje);
 
     res.setHeader("Content-Type", "application/pdf");
+
+    // ✅ FIX MOBILE: impedir cache do PDF (Android/iOS)
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+
     res.setHeader("Content-Disposition", `inline; filename="SITUACAO_REAL_4BPMM_${hojeBr.replaceAll("/", "-")}.pdf"`);
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
