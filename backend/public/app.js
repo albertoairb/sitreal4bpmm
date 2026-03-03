@@ -27,9 +27,34 @@ async function apiPost(url, body) {
   return r.json();
 }
 
+/**
+ * ✅ Correção: atualiza a data mesmo se o HTML tiver id diferente.
+ * Troca qualquer "CARREGANDO..." por "DATA: dd/mm/aaaa".
+ */
 function renderHeader(hojeBr) {
-  const el = $("#hoje");
-  if (el) el.textContent = hojeBr ? `DATA: ${hojeBr}` : "";
+  const txt = hojeBr ? `DATA: ${hojeBr}` : "DATA: -";
+
+  // tenta ids mais comuns
+  const ids = ["#hoje", "#dataHoje", "#dataRef", "#lblData"];
+  for (const id of ids) {
+    const el = document.querySelector(id);
+    if (el) el.textContent = txt;
+  }
+
+  // tenta classe (caso o HTML use classe)
+  document.querySelectorAll(".js-hoje").forEach((el) => {
+    el.textContent = txt;
+  });
+
+  // fallback extra: se existir um "pill" com CARREGANDO..., troca também
+  // (não mexe em botões; só troca se o texto for exatamente "CARREGANDO..." ou começar com isso)
+  document.querySelectorAll("body *").forEach((el) => {
+    if (!el || !el.textContent) return;
+    const t = el.textContent.trim();
+    if (t === "CARREGANDO..." || t === "CARREGANDO") {
+      el.textContent = txt;
+    }
+  });
 }
 
 function renderTabela() {
@@ -119,6 +144,7 @@ async function carregar() {
   const out = await apiGet("/api/estado");
   if (!out.ok) throw new Error(out.error || "falha ao carregar estado");
 
+  // ✅ aqui é onde atualiza a data
   renderHeader(out.hoje_br);
 
   ESTADO = Array.isArray(out.data)
