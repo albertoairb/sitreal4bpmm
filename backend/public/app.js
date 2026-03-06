@@ -1,223 +1,168 @@
-const $ = (sel) => document.querySelector(sel);
+// ===============================
+// SITUAÇÕES DISPONÍVEIS
+// ===============================
 
-let SITUACOES = [];
-let ESTADO = []; // {oficial_id, nome, situacao, observacao}
+const SITUACOES = [
+  "EXP",
+  "SR",
+  "MA",
+  "VE",
+  "FOJ",
+  "FO*",
+  "LP",
+  "FÉRIAS",
+  "CFP_DIA",
+  "CFP_NOITE",
+  "OUTROS",
+  "SS",
+  "EXP_SS",
+  "FO",
+  "PF"
+];
 
-function toast(msg) {
-  const el = $("#toast");
-  if (!el) return alert(msg);
-  el.textContent = msg;
-  el.style.opacity = "1";
-  clearTimeout(window.__t);
-  window.__t = setTimeout(() => (el.style.opacity = "0"), 2200);
+// ===============================
+// CARREGAR DATA
+// ===============================
+
+function atualizarData() {
+  const el = document.getElementById("hoje");
+  if (!el) return;
+
+  const hoje = new Date();
+  const dia = String(hoje.getDate()).padStart(2, "0");
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+  const ano = hoje.getFullYear();
+
+  el.innerText = `DATA: ${dia}/${mes}/${ano}`;
 }
 
-async function apiGet(url) {
-  const r = await fetch(url, { cache: "no-store" });
-  return r.json();
-}
+atualizarData();
 
-async function apiPost(url, body) {
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    cache: "no-store",
-    body: JSON.stringify(body),
-  });
-  return r.json();
-}
+// ===============================
+// POPULAR SELECTS
+// ===============================
 
-/**
- * ✅ Correção: atualiza a data mesmo se o HTML tiver id diferente.
- * Troca qualquer "CARREGANDO..." por "DATA: dd/mm/aaaa".
- */
-function renderHeader(hojeBr) {
-  const txt = hojeBr ? `DATA: ${hojeBr}` : "DATA: -";
+function criarSelect(valorAtual) {
+  const select = document.createElement("select");
 
-  // tenta ids mais comuns
-  const ids = ["#hoje", "#dataHoje", "#dataRef", "#lblData"];
-  for (const id of ids) {
-    const el = document.querySelector(id);
-    if (el) el.textContent = txt;
-  }
+  SITUACOES.forEach((sit) => {
+    const opt = document.createElement("option");
+    opt.value = sit;
+    opt.textContent = sit;
 
-  // tenta classe (caso o HTML use classe)
-  document.querySelectorAll(".js-hoje").forEach((el) => {
-    el.textContent = txt;
-  });
-
-  // fallback extra: se existir um "pill" com CARREGANDO..., troca também
-  // (não mexe em botões; só troca se o texto for exatamente "CARREGANDO..." ou começar com isso)
-  document.querySelectorAll("body *").forEach((el) => {
-    if (!el || !el.textContent) return;
-    const t = el.textContent.trim();
-    if (t === "CARREGANDO..." || t === "CARREGANDO") {
-      el.textContent = txt;
+    if (sit === valorAtual) {
+      opt.selected = true;
     }
+
+    select.appendChild(opt);
   });
+
+  return select;
 }
 
-function renderTabela() {
-  const tbody = $("#tbody");
-  if (!tbody) return;
+// ===============================
+// CARREGAR TABELA
+// ===============================
+
+async function carregar() {
+  const tbody = document.getElementById("tbody");
+
+  const resp = await fetch("/api/oficiais");
+  const dados = await resp.json();
 
   tbody.innerHTML = "";
 
-  for (const row of ESTADO) {
+  dados.forEach((of) => {
     const tr = document.createElement("tr");
 
-    const tdOf = document.createElement("td");
-    tdOf.className = "col-oficial";
-    tdOf.textContent = String(row.nome || "").toUpperCase();
+    const tdNome = document.createElement("td");
+    tdNome.textContent = of.nome;
 
-    const tdSit = document.createElement("td");
-    const sel = document.createElement("select");
-    sel.className = "sit";
-    const opt0 = document.createElement("option");
-    opt0.value = "";
-    opt0.textContent = "";
-    sel.appendChild(opt0);
-
-    for (const s of SITUACOES) {
-      const opt = document.createElement("option");
-      opt.value = s;
-      opt.textContent = s;
-      sel.appendChild(opt);
-    }
-
-    sel.value = row.situacao || "";
-    sel.addEventListener("change", () => {
-      row.situacao = sel.value || "";
-    });
-
-    tdSit.appendChild(sel);
+    const tdSituacao = document.createElement("td");
+    const select = criarSelect(of.situacao);
+    tdSituacao.appendChild(select);
 
     const tdObs = document.createElement("td");
-    const inp = document.createElement("textarea");
-    inp.className = "obs";
-    inp.rows = 2;
-    inp.placeholder = "livre";
-    inp.value = row.observacao || "";
-    inp.addEventListener("input", () => {
-      row.observacao = inp.value;
-    });
-    tdObs.appendChild(inp);
+    const obs = document.createElement("input");
+    obs.type = "text";
+    obs.value = of.obs || "";
+    obs.placeholder = "livre";
+    tdObs.appendChild(obs);
 
-    const tdAcao = document.createElement("td");
+    const tdSalvar = document.createElement("td");
     const btn = document.createElement("button");
-    btn.className = "btn-small";
-    btn.textContent = "SALVAR";
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      btn.textContent = "SALVANDO...";
-      try {
-        const out = await apiPost("/api/estado", {
-          oficial_id: row.oficial_id,
-          situacao: (row.situacao || "").toString().trim(),
-          observacao: (row.observacao || "").toString().trim(),
-        });
-        if (!out.ok) throw new Error(out.error || "falha ao salvar");
-        toast("SALVO");
-      } catch (e) {
-        toast(`ERRO: ${e.message}`);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "SALVAR";
-      }
-    });
+    btn.className = "btn";
+    btn.innerText = "SALVAR";
 
-    tdAcao.appendChild(btn);
+    btn.onclick = async () => {
+      await fetch("/api/salvar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          id: of.id,
+          situacao: select.value,
+          obs: obs.value
+        })
+      });
 
-    tr.appendChild(tdOf);
-    tr.appendChild(tdSit);
+      mostrarToast("Salvo");
+    };
+
+    tdSalvar.appendChild(btn);
+
+    tr.appendChild(tdNome);
+    tr.appendChild(tdSituacao);
     tr.appendChild(tdObs);
-    tr.appendChild(tdAcao);
+    tr.appendChild(tdSalvar);
 
     tbody.appendChild(tr);
-  }
-}
-
-async function carregar() {
-  const cfg = await apiGet("/api/config");
-  SITUACOES = Array.isArray(cfg.situacoes) ? cfg.situacoes : [];
-
-  const out = await apiGet("/api/estado");
-  if (!out.ok) throw new Error(out.error || "falha ao carregar estado");
-
-  // ✅ aqui é onde atualiza a data
-  renderHeader(out.hoje_br);
-
-  ESTADO = Array.isArray(out.data)
-    ? out.data.map((r) => ({
-        oficial_id: r.oficial_id,
-        nome: r.nome,
-        situacao: r.situacao || "",
-        observacao: r.observacao || "",
-      }))
-    : [];
-
-  renderTabela();
-}
-
-async function salvarTudoBulk() {
-  const btn = $("#btnSalvarTudo");
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "SALVANDO...";
-  }
-
-  try {
-    const itens = ESTADO.map((r) => ({
-      oficial_id: r.oficial_id,
-      situacao: (r.situacao || "").toString().trim(),
-      observacao: (r.observacao || "").toString().trim(),
-    }));
-
-    const out = await apiPost("/api/estado/bulk", { itens });
-    if (!out.ok) throw new Error(out.error || "falha ao salvar tudo");
-
-    toast(`SALVO (${out.qtd})`);
-
-    // confirma no próprio app (recarrega do banco)
-    await carregar();
-  } catch (e) {
-    toast(`ERRO: ${e.message}`);
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = "SALVAR TUDO";
-    }
-  }
-}
-
-function abrirPdf() {
-  // cache-busting no link (força PDF novo sempre)
-  window.open("/api/pdf?t=" + Date.now(), "_blank");
-}
-
-function wire() {
-  const b1 = $("#btnRecarregar");
-  if (b1) b1.addEventListener("click", async () => {
-    try {
-      await carregar();
-      toast("ATUALIZADO");
-    } catch (e) {
-      toast(`ERRO: ${e.message}`);
-    }
   });
-
-  const b2 = $("#btnPdf");
-  if (b2) b2.addEventListener("click", abrirPdf);
-
-  const b3 = $("#btnSalvarTudo");
-  if (b3) b3.addEventListener("click", salvarTudoBulk);
 }
 
-(async function main() {
-  try {
-    wire();
-    await carregar();
-  } catch (e) {
-    toast(`ERRO: ${e.message}`);
-  }
-})();
+// ===============================
+// SALVAR TUDO
+// ===============================
+
+document.getElementById("btnSalvarTudo")?.addEventListener("click", () => {
+  carregar();
+});
+
+// ===============================
+// RECARREGAR
+// ===============================
+
+document.getElementById("btnRecarregar")?.addEventListener("click", () => {
+  carregar();
+});
+
+// ===============================
+// PDF
+// ===============================
+
+document.getElementById("btnPdf")?.addEventListener("click", () => {
+  window.open("/api/pdf", "_blank");
+});
+
+// ===============================
+// TOAST
+// ===============================
+
+function mostrarToast(msg) {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+
+  toast.innerText = msg;
+  toast.classList.add("show");
+
+  setTimeout(() => {
+    toast.classList.remove("show");
+  }, 2000);
+}
+
+// ===============================
+// INICIAR
+// ===============================
+
+carregar();
