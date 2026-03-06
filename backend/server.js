@@ -15,6 +15,20 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
+/**
+ * Anti-cache (ajuda mobile a não “congelar” respostas antigas)
+ * - Mantém o app sempre atualizado no Android/iOS
+ */
+app.use((req, res, next) => {
+  // Não aplico isso em tudo que é estático por padrão do express, mas isso ajuda bem no mobile.
+  // Para o PDF tem headers próprios mais fortes mais abaixo.
+  if (req.path.startsWith("/api/") || req.path === "/" || req.path.endsWith(".html")) {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+  }
+  next();
+});
+
 function hojeSP() {
   const tz = process.env.TIMEZONE || "America/Sao_Paulo";
   return DateTime.now().setZone(tz).toISODate();
@@ -45,22 +59,44 @@ function missingDbEnv(cfg) {
 
 const pool = mysql.createPool(dbConfig());
 
-// Situações (tudo em maiúsculo)
+// Situações (tudo em maiúsculo). Mantidas e ampliadas conforme regra do sistema.
 const SITUACOES = [
-  "VE",
-  "MA",
+  "EXP",
   "SR",
+  "MA",
+  "VE",
+  "FOJ",
+  "FO*",
+  "LP",
+  "FÉRIAS",
   "CFP_DIA",
   "CFP_NOITE",
-  "FO*",
-  "FOJ",
-  "EXP",
-  "EXP-SS",
-  "FÉRIAS",
-  "LP",
-  "CURSO",
   "OUTROS",
+  "SS",
+  "EXP_SS",
+  "FO",
+  "PF",
+  "CURSO",
 ];
+
+const DESCRICOES_SITUACAO = {
+  EXP: "expediente",
+  SR: "supervisor regional",
+  MA: "trabalha manhã",
+  VE: "trabalha tarde",
+  FOJ: "folga (sem descrição)",
+  "FO*": "folga (com descrição)",
+  LP: "licença-prêmio",
+  "FÉRIAS": "férias",
+  CFP_DIA: "CFP (dia)",
+  CFP_NOITE: "CFP (noite)",
+  OUTROS: "com descrição",
+  SS: "superior de sobreaviso",
+  EXP_SS: "expediente superior de sobreaviso",
+  FO: "folga",
+  PF: "ponto facultativo",
+  CURSO: "curso",
+};
 
 async function ensureSchema() {
   await pool.query(`
@@ -86,6 +122,7 @@ async function ensureSchema() {
 
 async function resetSeNovoDia() {
   const hoje = hojeSP();
+
   const [rows] = await pool.query(`SELECT COUNT(*) AS c FROM estado_do_dia WHERE data_ref = ?`, [hoje]);
   if ((rows?.[0]?.c ?? 0) > 0) return;
 
@@ -148,7 +185,7 @@ app.get("/health", async (_req, res) => {
 });
 
 app.get("/api/config", (_req, res) => {
-  res.json({ situacoes: SITUACOES, timezone: process.env.TIMEZONE || "America/Sao_Paulo" });
+  res.json({ situacoes: SITUACOES, descricoes: DESCRICOES_SITUACAO, timezone: process.env.TIMEZONE || "America/Sao_Paulo" });
 });
 
 app.get("/api/estado", async (_req, res) => {
@@ -160,18 +197,20 @@ app.get("/api/estado", async (_req, res) => {
   }
 });
 
+// salvar individual (mantido)
 app.post("/api/estado", async (req, res) => {
   try {
     const { oficial_id, situacao, observacao } = req.body || {};
     const id = Number(oficial_id);
     if (!id) return res.status(400).json({ ok: false, error: "oficial_id inválido" });
 
-    if (situacao != null && situacao !== "" && !SITUACOES.includes(String(situacao))) {
+    const situacaoNorm = String(situacao ?? "").trim() === "EXP-SS" ? "EXP_SS" : String(situacao ?? "").trim();
+    if (situacaoNorm !== "" && !SITUACOES.includes(situacaoNorm)) {
       return res.status(400).json({ ok: false, error: "situação inválida" });
     }
 
     const obs = (observacao ?? "").toString().trim().slice(0, 255);
-    const sit = (situacao ?? "").toString().trim().slice(0, 50) || null;
+    const sit = (situacaoNorm || "").toString().trim().slice(0, 50) || null;
 
     const out = await getEstadoDoDia();
     await pool.query(
@@ -185,12 +224,74 @@ app.post("/api/estado", async (req, res) => {
   }
 });
 
+/**
+ * ✅ CORREÇÃO DEFINITIVA MOBILE:
+ * SALVAR TUDO em UMA ÚNICA REQUISIÇÃO (evita o Android “perder” parte das atualizações).
+ */
+app.post("/api/estado/bulk", async (req, res) => {
+  try {
+    const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+    if (itens.length === 0) return res.status(400).json({ ok: false, error: "itens vazio" });
+
+    for (const it of itens) {
+      const id = Number(it?.oficial_id);
+      if (!id) return res.status(400).json({ ok: false, error: "oficial_id inválido" });
+
+      const situacao = String(it?.situacao ?? "").trim() === "EXP-SS" ? "EXP_SS" : String(it?.situacao ?? "").trim();
+      if (situacao !== "" && !SITUACOES.includes(situacao)) {
+        return res.status(400).json({ ok: false, error: `situação inválida: ${situacao}` });
+      }
+
+      const obs = (it?.observacao ?? "").toString();
+      if (obs.length > 255) return res.status(400).json({ ok: false, error: "observacao > 255" });
+    }
+
+    const out = await getEstadoDoDia();
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      for (const it of itens) {
+        const id = Number(it.oficial_id);
+        const sit = ((String(it.situacao ?? "").trim() === "EXP-SS" ? "EXP_SS" : String(it.situacao ?? "").trim())).slice(0, 50) || null;
+        const obs = (it.observacao ?? "").toString().trim().slice(0, 255) || null;
+
+        await conn.query(
+          `UPDATE estado_do_dia
+           SET situacao = ?, observacao = ?, atualizado_em = NOW()
+           WHERE data_ref = ? AND oficial_id = ?`,
+          [sit, obs, out.hoje, id]
+        );
+      }
+
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
+
+    res.json({ ok: true, qtd: itens.length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 app.get("/api/pdf", async (_req, res) => {
   try {
     const { hoje, data } = await getEstadoDoDia();
     const hojeBr = formatarBR(hoje);
 
     res.setHeader("Content-Type", "application/pdf");
+
+    // ✅ PDF sem cache (Android/iOS)
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+
     res.setHeader("Content-Disposition", `inline; filename="SITUACAO_REAL_4BPMM_${hojeBr.replaceAll("/", "-")}.pdf"`);
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -242,6 +343,17 @@ app.get("/api/pdf", async (_req, res) => {
       drawRow(String(r.nome || "").toUpperCase(), String(r.situacao || "").toUpperCase(), String(r.observacao || ""));
     }
 
+    const legendas = SITUACOES.map((sigla) => `${sigla} – ${DESCRICOES_SITUACAO[sigla] || ""}`);
+    const legendaTexto = `LEGENDA: ${legendas.join(" | ")}`;
+    const legendaAltura = doc.heightOfString(legendaTexto, { width: 515 });
+    if (y + legendaAltura + 50 > doc.page.height - 60) {
+      doc.addPage();
+      y = 40;
+    } else {
+      y += 10;
+    }
+    doc.fontSize(8).text(legendaTexto, 40, y, { width: 515, align: "left" });
+
     doc.fontSize(10).text(`SÃO PAULO, ${hojeBr}.`, 40, doc.page.height - 60, { align: "left" });
 
     doc.end();
@@ -251,6 +363,7 @@ app.get("/api/pdf", async (_req, res) => {
 });
 
 app.get("*", (_req, res) => {
+  // mantém SPA simples (index.html)
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
