@@ -59,7 +59,11 @@ function missingDbEnv(cfg) {
 
 const pool = mysql.createPool(dbConfig());
 
+<<<<<<< HEAD
 // Situações (tudo em maiúsculo). Mantidas e ampliadas conforme regra do sistema.
+=======
+// Situações (tudo em maiúsculo). Mantidas + CFP_DIA / CFP_NOITE.
+>>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
 const SITUACOES = [
   "EXP",
   "SR",
@@ -237,8 +241,13 @@ app.post("/api/estado/bulk", async (req, res) => {
       const id = Number(it?.oficial_id);
       if (!id) return res.status(400).json({ ok: false, error: "oficial_id inválido" });
 
+<<<<<<< HEAD
       const situacao = String(it?.situacao ?? "").trim() === "EXP-SS" ? "EXP_SS" : String(it?.situacao ?? "").trim();
       if (situacao !== "" && !SITUACOES.includes(situacao)) {
+=======
+      const situacao = it?.situacao ?? "";
+      if (situacao !== "" && situacao != null && !SITUACOES.includes(String(situacao))) {
+>>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
         return res.status(400).json({ ok: false, error: `situação inválida: ${situacao}` });
       }
 
@@ -254,7 +263,11 @@ app.post("/api/estado/bulk", async (req, res) => {
 
       for (const it of itens) {
         const id = Number(it.oficial_id);
+<<<<<<< HEAD
         const sit = ((String(it.situacao ?? "").trim() === "EXP-SS" ? "EXP_SS" : String(it.situacao ?? "").trim())).slice(0, 50) || null;
+=======
+        const sit = (it.situacao ?? "").toString().trim().slice(0, 50) || null;
+>>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
         const obs = (it.observacao ?? "").toString().trim().slice(0, 255) || null;
 
         await conn.query(
