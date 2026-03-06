@@ -1,46 +1,33 @@
-<!doctype html>
-<html lang="pt-br">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta http-equiv="Cache-Control" content="no-store" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title>SITUAÇÃO REAL – 4º BPM/M</title>
-    <link rel="stylesheet" href="/style.css?v=1" />
-  </head>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <body>
-    <div class="wrap">
-      <div class="topbar">
-        <div class="pill" id="hoje">CARREGANDO...</div>
-      </div>
+<title>Situação Real dos Oficiais</title>
 
-      <div class="btns">
-        <button id="btnRecarregar" class="btn">RECARREGAR</button>
-        <button id="btnPdf" class="btn">PDF</button>
-        <button id="btnSalvarTudo" class="btn">SALVAR TUDO</button>
-      </div>
+<link rel="stylesheet" href="style.css">
 
-      <h1 class="title">SITUAÇÃO REAL DOS OFICIAIS – 4º BPM/M</h1>
+</head>
 
-      <div class="tablewrap">
-        <table class="tbl">
-          <thead>
-            <tr>
-              <th>OFICIAL</th>
-              <th>SITUAÇÃO</th>
-              <th>OBSERVAÇÃO (LIVRE)</th>
-              <th>AÇÃO</th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
-      </div>
+<body>
 
-      <div id="toast" class="toast"></div>
-    </div>
+<header>
+<h1>Situação Real dos Oficiais</h1>
+</header>
 
-    <script src="/app.js?v=3"></script>
-  </body>
+<main>
+
+<div id="app"></div>
+
+</main>
+
+<footer>
+<p>4º BPM/M</p>
+</footer>
+
+<!-- IMPORTANTE: versão do JS para quebrar cache do iPhone -->
+<script src="app.js?v=2"></script>
+
+</body>
 </html>
