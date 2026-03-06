@@ -1,10 +1,6 @@
 const $ = (sel) => document.querySelector(sel);
 
 let SITUACOES = [];
-<<<<<<< HEAD
-let DESCRICOES = {};
-=======
->>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
 let ESTADO = []; // {oficial_id, nome, situacao, observacao}
 
 function toast(msg) {
@@ -85,11 +81,7 @@ function renderTabela() {
     for (const s of SITUACOES) {
       const opt = document.createElement("option");
       opt.value = s;
-<<<<<<< HEAD
-      opt.textContent = DESCRICOES[s] ? `${s} – ${DESCRICOES[s]}` : s;
-=======
       opt.textContent = s;
->>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
       sel.appendChild(opt);
     }
 
@@ -148,10 +140,6 @@ function renderTabela() {
 async function carregar() {
   const cfg = await apiGet("/api/config");
   SITUACOES = Array.isArray(cfg.situacoes) ? cfg.situacoes : [];
-<<<<<<< HEAD
-  DESCRICOES = cfg && typeof cfg.descricoes === "object" && cfg.descricoes ? cfg.descricoes : {};
-=======
->>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
 
   const out = await apiGet("/api/estado");
   if (!out.ok) throw new Error(out.error || "falha ao carregar estado");

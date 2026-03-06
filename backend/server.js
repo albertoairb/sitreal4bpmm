@@ -59,11 +59,7 @@ function missingDbEnv(cfg) {
 
 const pool = mysql.createPool(dbConfig());
 
-<<<<<<< HEAD
-// Situações (tudo em maiúsculo). Mantidas e ampliadas conforme regra do sistema.
-=======
-// Situações (tudo em maiúsculo). Mantidas + CFP_DIA / CFP_NOITE.
->>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
+// Situações (tudo em maiúsculo). Todas aceitam observação neste sistema.
 const SITUACOES = [
   "EXP",
   "SR",
@@ -80,10 +76,12 @@ const SITUACOES = [
   "EXP_SS",
   "FO",
   "PF",
+  // compatibilidade legada
+  "EXP-SS",
   "CURSO",
 ];
 
-const DESCRICOES_SITUACAO = {
+const DESCRICOES = {
   EXP: "expediente",
   SR: "supervisor regional",
   MA: "trabalha manhã",
@@ -99,8 +97,16 @@ const DESCRICOES_SITUACAO = {
   EXP_SS: "expediente superior de sobreaviso",
   FO: "folga",
   PF: "ponto facultativo",
+  "EXP-SS": "expediente superior de sobreaviso",
   CURSO: "curso",
 };
+
+function normalizarSituacao(valor) {
+  const s = (valor ?? "").toString().trim();
+  if (!s) return "";
+  if (s === "EXP-SS") return "EXP_SS";
+  return s;
+}
 
 async function ensureSchema() {
   await pool.query(`
@@ -189,13 +195,14 @@ app.get("/health", async (_req, res) => {
 });
 
 app.get("/api/config", (_req, res) => {
-  res.json({ situacoes: SITUACOES, descricoes: DESCRICOES_SITUACAO, timezone: process.env.TIMEZONE || "America/Sao_Paulo" });
+  res.json({ situacoes: SITUACOES.filter((s) => s !== "EXP-SS"), descricoes: DESCRICOES, timezone: process.env.TIMEZONE || "America/Sao_Paulo" });
 });
 
 app.get("/api/estado", async (_req, res) => {
   try {
     const out = await getEstadoDoDia();
-    res.json({ ok: true, data: out.data, hoje: out.hoje, hoje_br: formatarBR(out.hoje) });
+    const dataNorm = (out.data || []).map((r) => ({ ...r, situacao: normalizarSituacao(r.situacao) || "" }));
+    res.json({ ok: true, data: dataNorm, hoje: out.hoje, hoje_br: formatarBR(out.hoje) });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
@@ -208,13 +215,13 @@ app.post("/api/estado", async (req, res) => {
     const id = Number(oficial_id);
     if (!id) return res.status(400).json({ ok: false, error: "oficial_id inválido" });
 
-    const situacaoNorm = String(situacao ?? "").trim() === "EXP-SS" ? "EXP_SS" : String(situacao ?? "").trim();
+    const situacaoNorm = normalizarSituacao(situacao);
     if (situacaoNorm !== "" && !SITUACOES.includes(situacaoNorm)) {
       return res.status(400).json({ ok: false, error: "situação inválida" });
     }
 
     const obs = (observacao ?? "").toString().trim().slice(0, 255);
-    const sit = (situacaoNorm || "").toString().trim().slice(0, 50) || null;
+    const sit = situacaoNorm.slice(0, 50) || null;
 
     const out = await getEstadoDoDia();
     await pool.query(
@@ -241,13 +248,8 @@ app.post("/api/estado/bulk", async (req, res) => {
       const id = Number(it?.oficial_id);
       if (!id) return res.status(400).json({ ok: false, error: "oficial_id inválido" });
 
-<<<<<<< HEAD
-      const situacao = String(it?.situacao ?? "").trim() === "EXP-SS" ? "EXP_SS" : String(it?.situacao ?? "").trim();
+      const situacao = normalizarSituacao(it?.situacao ?? "");
       if (situacao !== "" && !SITUACOES.includes(situacao)) {
-=======
-      const situacao = it?.situacao ?? "";
-      if (situacao !== "" && situacao != null && !SITUACOES.includes(String(situacao))) {
->>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
         return res.status(400).json({ ok: false, error: `situação inválida: ${situacao}` });
       }
 
@@ -263,11 +265,7 @@ app.post("/api/estado/bulk", async (req, res) => {
 
       for (const it of itens) {
         const id = Number(it.oficial_id);
-<<<<<<< HEAD
-        const sit = ((String(it.situacao ?? "").trim() === "EXP-SS" ? "EXP_SS" : String(it.situacao ?? "").trim())).slice(0, 50) || null;
-=======
-        const sit = (it.situacao ?? "").toString().trim().slice(0, 50) || null;
->>>>>>> 8d4534749dd598663184d15438bdcffb1ac4e8df
+        const sit = normalizarSituacao(it.situacao ?? "").slice(0, 50) || null;
         const obs = (it.observacao ?? "").toString().trim().slice(0, 255) || null;
 
         await conn.query(
@@ -313,7 +311,27 @@ app.get("/api/pdf", async (_req, res) => {
     doc.fontSize(14).text("SITUAÇÃO REAL DOS OFICIAIS – 4º BPM/M", { align: "center" });
     doc.moveDown(0.3);
     doc.fontSize(11).text(`DATA: ${hojeBr}`, { align: "center" });
-    doc.moveDown(1);
+    doc.moveDown(0.6);
+
+    const legenda = [
+      "EXP – expediente",
+      "SR – supervisor regional",
+      "MA – trabalha manhã",
+      "VE – trabalha tarde",
+      "FOJ – folga (sem descrição)",
+      "FO* – folga (com descrição)",
+      "LP – licença-prêmio",
+      "FÉRIAS – férias",
+      "CFP_DIA – CFP (dia)",
+      "CFP_NOITE – CFP (noite)",
+      "OUTROS – com descrição",
+      "SS – superior de sobreaviso",
+      "EXP_SS – expediente superior de sobreaviso",
+      "FO – folga",
+      "PF – ponto facultativo",
+    ];
+    doc.fontSize(8).text(legenda.join(" | "), { align: "left" });
+    doc.moveDown(0.8);
 
     const startX = 40;
     let y = doc.y;
@@ -353,19 +371,8 @@ app.get("/api/pdf", async (_req, res) => {
     drawRow("OFICIAL", "SITUAÇÃO", "OBSERVAÇÃO", true);
 
     for (const r of data) {
-      drawRow(String(r.nome || "").toUpperCase(), String(r.situacao || "").toUpperCase(), String(r.observacao || ""));
+      drawRow(String(r.nome || "").toUpperCase(), normalizarSituacao(r.situacao || "").toUpperCase(), String(r.observacao || ""));
     }
-
-    const legendas = SITUACOES.map((sigla) => `${sigla} – ${DESCRICOES_SITUACAO[sigla] || ""}`);
-    const legendaTexto = `LEGENDA: ${legendas.join(" | ")}`;
-    const legendaAltura = doc.heightOfString(legendaTexto, { width: 515 });
-    if (y + legendaAltura + 50 > doc.page.height - 60) {
-      doc.addPage();
-      y = 40;
-    } else {
-      y += 10;
-    }
-    doc.fontSize(8).text(legendaTexto, 40, y, { width: 515, align: "left" });
 
     doc.fontSize(10).text(`SÃO PAULO, ${hojeBr}.`, 40, doc.page.height - 60, { align: "left" });
 
