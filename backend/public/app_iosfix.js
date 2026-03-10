@@ -1,5 +1,4 @@
 const FALLBACK_SITUACOES = [
-  "",
   "EXP",
   "SR",
   "MA",
@@ -14,7 +13,8 @@ const FALLBACK_SITUACOES = [
   "SS",
   "EXP_SS",
   "FO",
-  "PF"
+  "PF",
+  "CURSO"
 ];
 
 let SITUACOES = [...FALLBACK_SITUACOES];
@@ -59,6 +59,11 @@ function mostrarToast(msg, erro = false) {
 function criarSelect(valorAtual) {
   const select = document.createElement("select");
 
+  const optVazia = document.createElement("option");
+  optVazia.value = "";
+  optVazia.textContent = "";
+  select.appendChild(optVazia);
+
   SITUACOES.forEach((sit) => {
     const opt = document.createElement("option");
     opt.value = sit;
@@ -67,7 +72,7 @@ function criarSelect(valorAtual) {
     select.appendChild(opt);
   });
 
-  if (!SITUACOES.includes(normalizarSituacao(valorAtual))) {
+  if (!valorAtual) {
     select.value = "";
   }
 
@@ -96,6 +101,7 @@ function montarLinha(item) {
   const btn = document.createElement("button");
   btn.className = "btn-small";
   btn.textContent = "SALVAR";
+
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     btn.textContent = "SALVANDO...";
@@ -109,8 +115,10 @@ function montarLinha(item) {
           observacao: textarea.value,
         }),
       });
+
       const json = await resp.json();
       if (!resp.ok || !json.ok) throw new Error(json.error || "erro ao salvar");
+
       item.situacao = select.value;
       item.observacao = textarea.value;
       mostrarToast("Salvo");
@@ -121,12 +129,14 @@ function montarLinha(item) {
       btn.textContent = "SALVAR";
     }
   });
+
   tdAcao.appendChild(btn);
 
   tr.appendChild(tdNome);
   tr.appendChild(tdSituacao);
   tr.appendChild(tdObs);
   tr.appendChild(tdAcao);
+
   return tr;
 }
 
@@ -141,9 +151,14 @@ async function carregarConfiguracao() {
   try {
     const resp = await fetch("/api/config", { cache: "no-store" });
     if (!resp.ok) throw new Error("config indisponível");
+
     const json = await resp.json();
     if (Array.isArray(json.situacoes) && json.situacoes.length) {
-      SITUACOES = ["", ...json.situacoes.map(normalizarSituacao).filter(Boolean)];
+      SITUACOES = json.situacoes
+        .map(normalizarSituacao)
+        .filter(Boolean);
+    } else {
+      SITUACOES = [...FALLBACK_SITUACOES];
     }
   } catch (_e) {
     SITUACOES = [...FALLBACK_SITUACOES];
@@ -153,7 +168,10 @@ async function carregarConfiguracao() {
 async function carregarEstado() {
   const resp = await fetch("/api/estado", { cache: "no-store" });
   const json = await resp.json();
-  if (!resp.ok || !json.ok) throw new Error(json.error || "erro ao carregar dados");
+
+  if (!resp.ok || !json.ok) {
+    throw new Error(json.error || "erro ao carregar dados");
+  }
 
   atualizarData(json.hoje_br);
 
