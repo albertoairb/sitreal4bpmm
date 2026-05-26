@@ -73,48 +73,6 @@ const SITUACOES = [
   "CURSO",
 ];
 
-
-const OFICIAIS_ORDEM = [
-  "TEN CEL PM HELDER ANTONIO DE PAULA",
-  "TEN CEL PM EDUARDO MOSNA XAVIER",
-  "TEN CEL PM ALESSANDRA PAULA TONOLLI",
-  "MAJ PM RICARDO SANTOS MEDEIROS",
-  "MAJ PM CARLOS BORDIM NETO",
-  "CAP PM ALBERTO FRANZINI NETO",
-  "CAP PM MARCIO SAITO ESSAKI",
-  "1º TEN PM DANIEL ALVES DE SIQUEIRA",
-  "CAP PM MATHEUS PEDRO TEODORO",
-  "1º TEN DENT PM FERNANDA BRUNO POMPONIO MARTIGNAGO",
-  "1º TEN DENT PM DAYANA DE OLIVEIRA SILVA ALMEIDA",
-  "CAP PM ANDRE SANTARELLI DE PAULA",
-  "CAP PM VINICIO AUGUSTO VOLTARELLI TAVARES",
-  "CAP PM JOSE ANTONIO MARCIANO NETO",
-  "CAP PM IURI FILIPE DOS SANTOS",
-  "1º TEN PM ANTONIO OVIDIO FERRUCIO CARDOSO",
-  "1º TEN PM BRUNO ANTAO DE OLIVEIRA",
-  "1º TEN PM LARISSA AMADEU LEITE",
-  "1º TEN PM RENATO FERNANDES FREIRE",
-  "1º TEN PM RAPHAEL MECCA SAMPAIO",
-];
-
-const OFICIAIS_ALIASES = new Map([
-  ["MAJ PM EDUARDO MOSNA XAVIER", "TEN CEL PM EDUARDO MOSNA XAVIER"],
-  ["MAJ PM ALESSANDRA PAULA TONOLLI", "TEN CEL PM ALESSANDRA PAULA TONOLLI"],
-  ["CAP PM CARLOS BORDIM NETO", "MAJ PM CARLOS BORDIM NETO"],
-  ["1º TEN PM MATEUS PEDRO TEODORO", "CAP PM MATHEUS PEDRO TEODORO"],
-  ["1º TEN PM MATHEUS PEDRO TEODORO", "CAP PM MATHEUS PEDRO TEODORO"],
-  ["1º TEN PM IURI FILIPE DOS SANTOS", "CAP PM IURI FILIPE DOS SANTOS"],
-  ["CAP PM MATEUS PEDRO TEODORO", "CAP PM MATHEUS PEDRO TEODORO"],
-  ["1º TEN PM DANIEL ALVARES DE SIQUEIRA", "1º TEN PM DANIEL ALVES DE SIQUEIRA"],
-  ["CAP PM ANDRÉ SANTARELLI DE PAULA", "CAP PM ANDRE SANTARELLI DE PAULA"],
-  ["1º TEN PM ANTÔNIO OVIDIO FERRUCIO CARDOSO", "1º TEN PM ANTONIO OVIDIO FERRUCIO CARDOSO"],
-  ["1º TEN PM BRUNO ANTÃO DE OLIVEIRA", "1º TEN PM BRUNO ANTAO DE OLIVEIRA"],
-]);
-
-function nomeOficialNormalizado(nome) {
-  return String(nome || "").trim().toUpperCase();
-}
-
 const DESCRICOES = {
   EXP: "expediente",
   SR: "supervisor regional",
@@ -163,38 +121,6 @@ async function ensureSchema() {
   `);
 }
 
-async function garantirCadastroVisualOficiais() {
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-
-    for (const [antigo, novo] of OFICIAIS_ALIASES.entries()) {
-      await conn.query(
-        `UPDATE oficiais SET nome = ? WHERE UPPER(nome) = ?`,
-        [novo, antigo]
-      );
-    }
-
-    for (const nome of OFICIAIS_ORDEM) {
-      const [rows] = await conn.query(
-        `SELECT id FROM oficiais WHERE UPPER(nome) = ? LIMIT 1`,
-        [nome]
-      );
-
-      if (!rows.length) {
-        await conn.query(`INSERT INTO oficiais (nome) VALUES (?)`, [nome]);
-      }
-    }
-
-    await conn.commit();
-  } catch (e) {
-    await conn.rollback();
-    throw e;
-  } finally {
-    conn.release();
-  }
-}
-
 async function garantirLinhasDoDia() {
   const hoje = hojeSP();
 
@@ -229,7 +155,6 @@ async function getEstadoDoDia() {
   if (missingDbEnv(cfg)) throw new Error("db_env_ausente_no_app");
 
   await ensureSchema();
-  await garantirCadastroVisualOficiais();
   await garantirLinhasDoDia();
 
   const h = hojeSP();
@@ -247,9 +172,9 @@ async function getEstadoDoDia() {
     LEFT JOIN estado_do_dia e
       ON o.id = e.oficial_id
      AND e.data_ref = ?
-    ORDER BY FIELD(UPPER(o.nome), ${OFICIAIS_ORDEM.map(() => "?").join(",")}), o.id
+    ORDER BY o.id
     `,
-    [h, ...OFICIAIS_ORDEM]
+    [h]
   );
 
   return { hoje: h, data: rows };
@@ -286,7 +211,6 @@ app.get("/api/estado", async (_req, res) => {
     const out = await getEstadoDoDia();
     const dataNorm = (out.data || []).map((r) => ({
       ...r,
-      nome: nomeOficialNormalizado(r.nome),
       situacao: normalizarSituacao(r.situacao) || "",
     }));
 
