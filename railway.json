@@ -1,6 +1,8 @@
 {
   "build": {
-    "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "npm start"
   }
 }

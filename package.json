@@ -1,9 +1,16 @@
 {
   "name": "sitreal4bpmm",
+  "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "start": "node backend/server.js",
-    "start:backend": "npm --prefix backend start"
+    "start": "node server.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "luxon": "^3.5.0",
+    "mysql2": "^3.11.0",
+    "pdfkit": "^0.15.0"
+  }
 }
