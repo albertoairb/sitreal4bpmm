@@ -24,6 +24,20 @@ app.use((req, res, next) => {
   next();
 });
 
+
+function nomeOficialVisual(nome) {
+  const n = String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+
+  if (n.includes("MEDEIROS")) return null;
+  if (n.includes("MOSNA")) return "TEN CEL PM MOSNA";
+  if (n.includes("ALESSANDRA")) return "TEN CEL PM ALESSANDRA";
+  if (n.includes("BORDIM")) return "MAJ PM BORDIM";
+  if (n.includes("FILIPE")) return "CAP PM IURI FILIPE DOS SANTOS";
+  if (n.includes("TEODORO")) return "CAP PM MATHEUS PEDRO TEODORO";
+
+  return String(nome || "").toUpperCase();
+}
+
 function hojeSP() {
   const tz = process.env.TIMEZONE || "America/Sao_Paulo";
   return DateTime.now().setZone(tz).toISODate();
@@ -177,7 +191,11 @@ async function getEstadoDoDia() {
     [h]
   );
 
-  return { hoje: h, data: rows };
+  const dataVisual = rows
+    .map((r) => ({ ...r, nome: nomeOficialVisual(r.nome) }))
+    .filter((r) => r.nome);
+
+  return { hoje: h, data: dataVisual };
 }
 
 app.get("/health", async (_req, res) => {
