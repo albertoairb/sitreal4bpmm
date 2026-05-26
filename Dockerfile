@@ -7,9 +7,8 @@ RUN cd backend && npm install --omit=dev
 
 COPY backend ./backend
 
-WORKDIR /app/backend
-
+WORKDIR /app
 ENV NODE_ENV=production
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["node", "backend/server.js"]

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>SITUAÇÃO REAL – 4º BPM/M</title>
+    <link rel="stylesheet" href="/style.css?v=2" />
+  </head>
+
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <div class="pill" id="hoje">CARREGANDO...</div>
+      </div>
+
+      <div class="btns">
+        <button id="btnRecarregar" class="btn">RECARREGAR</button>
+        <button id="btnPdf" class="btn">PDF</button>
+        <button id="btnSalvarTudo" class="btn">SALVAR TUDO</button>
+      </div>
+
+      <h1 class="title">SITUAÇÃO REAL DOS OFICIAIS – 4º BPM/M</h1>
+
+      <div class="tablewrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>OFICIAL</th>
+              <th>SITUAÇÃO</th>
+              <th>OBSERVAÇÃO (LIVRE)</th>
+              <th>AÇÃO</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div id="toast" class="toast"></div>
+    </div>
+
+    <script src="/app_iosfix.js?v=1"></script>
+  </body>
+</html>
