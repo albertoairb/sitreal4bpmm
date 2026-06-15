@@ -5,8 +5,12 @@ const FALLBACK_SITUACOES = [
   "VE",
   "FOJ",
   "FO*",
+  "SV*",
   "LP",
   "FÉRIAS",
+  "FERIADO",
+  "CONVALESCENÇA",
+  "CURSO",
   "CFP_DIA",
   "CFP_NOITE",
   "OUTROS",
@@ -14,7 +18,13 @@ const FALLBACK_SITUACOES = [
   "EXP_SS",
   "FO",
   "PF",
-  "CURSO"
+  "CAO",
+  "EAP",
+  "CSP",
+  "PPJM",
+  "DS",
+  "CFT",
+  "TJM",
 ];
 
 let SITUACOES = [...FALLBACK_SITUACOES];

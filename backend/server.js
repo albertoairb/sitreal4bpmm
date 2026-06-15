@@ -26,15 +26,6 @@ app.use((req, res, next) => {
 
 
 function nomeOficialVisual(nome) {
-  const n = String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-
-  if (n.includes("MEDEIROS")) return null;
-  if (n.includes("MOSNA")) return null;
-  if (n.includes("ALESSANDRA")) return null;
-  if (n.includes("BORDIM")) return "MAJ PM BORDIM";
-  if (n.includes("FILIPE")) return "CAP PM IURI FILIPE DOS SANTOS";
-  if (n.includes("TEODORO")) return "CAP PM MATHEUS PEDRO TEODORO";
-
   return String(nome || "").toUpperCase();
 }
 
@@ -68,6 +59,29 @@ function missingDbEnv(cfg) {
 
 const pool = mysql.createPool(dbConfig());
 
+const OFICIAIS_PADRAO = [
+  "TEN CEL PM HELDER ANTONIO DE PAULA",
+  "MAJ PM RICARDO SANTOS MEDEIROS",
+  "MAJ PM CARLOS BORDIM NETO",
+  "CAP PM MARCIO SAITO ESSAKI",
+  "CAP PM JOSE ANTONIO MARCIANO NETO",
+  "CAP PM ALBERTO FRANZINI NETO",
+  "CAP PM VINICIO AUGUSTO VOLTARELLI TAVARES",
+  "CAP PM ANDRE SANTARELLI DE PAULA",
+  "CAP PM IURI FILIPE DOS SANTOS",
+  "CAP PM MATEUS PEDRO TEODORO",
+  "1º TEN PM DANIEL ALVES DE SIQUEIRA",
+  "1º TEN DENT PM FERNANDA BRUNO POMPONIO MARTIGNAGO",
+  "1º TEN DENT PM DAYANA DE OLIVEIRA SILVA ALMEIDA",
+  "1º TEN PM ANTONIO OVIDIO FERRUCIO CARDOSO",
+  "1º TEN PM BRUNO ANTAO DE OLIVEIRA",
+  "1º TEN PM LARISSA AMADEU LEITE",
+  "1º TEN PM RENATO FERNANDES FREIRE",
+  "1º TEN PM RAPHAEL MECCA SAMPAIO",
+  "ASP OF PM JOSE SEBASTIAO DOS SANTOS NETO",
+  "ASP OF PM LENISE HELENA TRAGANTE DE SOUZA CRISTO",
+];
+
 const SITUACOES = [
   "EXP",
   "SR",
@@ -75,8 +89,12 @@ const SITUACOES = [
   "VE",
   "FOJ",
   "FO*",
+  "SV*",
   "LP",
   "FÉRIAS",
+  "FERIADO",
+  "CONVALESCENÇA",
+  "CURSO",
   "CFP_DIA",
   "CFP_NOITE",
   "OUTROS",
@@ -84,7 +102,13 @@ const SITUACOES = [
   "EXP_SS",
   "FO",
   "PF",
-  "CURSO",
+  "CAO",
+  "EAP",
+  "CSP",
+  "PPJM",
+  "DS",
+  "CFT",
+  "TJM",
 ];
 
 const DESCRICOES = {
@@ -93,9 +117,13 @@ const DESCRICOES = {
   MA: "trabalha manhã",
   VE: "trabalha tarde",
   FOJ: "folga (sem descrição)",
-  "FO*": "folga (com descrição)",
+  'FO*': "folga (com descrição)",
+  'SV*': "serviço (com descrição)",
   LP: "licença-prêmio",
-  "FÉRIAS": "férias",
+  FÉRIAS: "férias",
+  FERIADO: "feriado",
+  CONVALESCENÇA: "convalescença",
+  CURSO: "curso",
   CFP_DIA: "CFP (dia)",
   CFP_NOITE: "CFP (noite)",
   OUTROS: "com descrição",
@@ -103,7 +131,13 @@ const DESCRICOES = {
   EXP_SS: "expediente superior de sobreaviso",
   FO: "folga",
   PF: "ponto facultativo",
-  CURSO: "curso",
+  CAO: "CAO",
+  EAP: "EAP",
+  CSP: "CSP",
+  PPJM: "PPJM",
+  DS: "DS",
+  CFT: "CFT",
+  TJM: "TJM",
 };
 
 function normalizarSituacao(valor) {
@@ -121,6 +155,7 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS estado_do_dia (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -133,6 +168,55 @@ async function ensureSchema() {
       UNIQUE KEY uniq_data_oficial (data_ref, oficial_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+}
+
+
+function chaveNome(nome) {
+  return String(nome || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function sincronizarOficiaisPadrao() {
+  const [cols] = await pool.query(`SHOW COLUMNS FROM oficiais LIKE 'ordem'`);
+  if (!cols.length) {
+    await pool.query(`ALTER TABLE oficiais ADD COLUMN ordem INT NULL`);
+  }
+
+  const [atuais] = await pool.query(`SELECT id, nome FROM oficiais`);
+  const porChave = new Map(atuais.map((o) => [chaveNome(o.nome), o]));
+  const idsPadrao = [];
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    for (let i = 0; i < OFICIAIS_PADRAO.length; i++) {
+      const nome = OFICIAIS_PADRAO[i];
+      const atual = porChave.get(chaveNome(nome));
+      if (atual) {
+        await conn.query(`UPDATE oficiais SET nome = ?, ordem = ? WHERE id = ?`, [nome, i + 1, atual.id]);
+        idsPadrao.push(atual.id);
+      } else {
+        const [result] = await conn.query(`INSERT INTO oficiais (nome, ordem) VALUES (?, ?)`, [nome, i + 1]);
+        idsPadrao.push(result.insertId);
+      }
+    }
+
+    if (idsPadrao.length) {
+      await conn.query(`DELETE FROM oficiais WHERE id NOT IN (?)`, [idsPadrao]);
+    }
+
+    await conn.commit();
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
 }
 
 async function garantirLinhasDoDia() {
@@ -169,6 +253,7 @@ async function getEstadoDoDia() {
   if (missingDbEnv(cfg)) throw new Error("db_env_ausente_no_app");
 
   await ensureSchema();
+  await sincronizarOficiaisPadrao();
   await garantirLinhasDoDia();
 
   const h = hojeSP();
@@ -186,7 +271,7 @@ async function getEstadoDoDia() {
     LEFT JOIN estado_do_dia e
       ON o.id = e.oficial_id
      AND e.data_ref = ?
-    ORDER BY o.id
+    ORDER BY COALESCE(o.ordem, o.id), o.id
     `,
     [h]
   );
@@ -365,8 +450,12 @@ app.get("/api/pdf", async (_req, res) => {
       "VE – trabalha tarde",
       "FOJ – folga (sem descrição)",
       "FO* – folga (com descrição)",
+      "SV* – serviço (com descrição)",
       "LP – licença-prêmio",
       "FÉRIAS – férias",
+      "FERIADO – feriado",
+      "CONVALESCENÇA – convalescença",
+      "CURSO – curso",
       "CFP_DIA – CFP (dia)",
       "CFP_NOITE – CFP (noite)",
       "OUTROS – com descrição",
@@ -374,7 +463,13 @@ app.get("/api/pdf", async (_req, res) => {
       "EXP_SS – expediente superior de sobreaviso",
       "FO – folga",
       "PF – ponto facultativo",
-      "CURSO – curso",
+      "CAO – CAO",
+      "EAP – EAP",
+      "CSP – CSP",
+      "PPJM – PPJM",
+      "DS – DS",
+      "CFT – CFT",
+      "TJM – TJM",
     ];
 
     doc.fontSize(8).text(legenda.join(" | "), { align: "left" });
